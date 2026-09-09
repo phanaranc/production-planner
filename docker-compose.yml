@@ -1,0 +1,64 @@
+name: production-planner
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: production-planner-db
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Bangkok
+      POSTGRES_USER: ppwm
+      POSTGRES_PASSWORD: ppwm_dev_local
+      POSTGRES_DB: production_planner
+    ports:
+      - "5440:5432"
+    volumes:
+      - production_planner_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ppwm -d production_planner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: production-planner-migrate
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment:
+      TZ: Asia/Bangkok
+      DATABASE_URL: postgresql://ppwm:ppwm_dev_local@db:5432/production_planner
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: production-planner-app
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Bangkok
+      DATABASE_URL: postgresql://ppwm:ppwm_dev_local@db:5432/production_planner
+      SESSION_SECRET: ${SESSION_SECRET:-dev-only-secret-change-me}
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3300:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+networks:
+  default:
+    name: production-planner-net
+
+volumes:
+  production_planner_db_data:
+    name: production_planner_db_data

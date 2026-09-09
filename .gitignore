@@ -1,0 +1,16 @@
+node_modules
+.next
+.env
+.env.local
+*.tsbuildinfo
+npm-debug.log*
+.DS_Store
+
+# Leftover deliverables from an earlier, separate exercise (Excel-based
+# v1 prompt) — not part of this app's source, kept on disk but not versioned.
+AI_Production_Waste_Dashboard.xlsx
+Production Waste Management KPI Dashboard.xlsx
+
+# Claude Code local session/machine state — not project source.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

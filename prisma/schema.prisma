@@ -1,0 +1,204 @@
+// GENCO Production Waste Management Planner — schema
+// Reference: master_prompt_waste_management_webapp_v2.md (sections cited in comments below).
+// Every "derived/computed" column named in §2 of the spec (ระยะเวลาบำบัด,
+// ส่วนต่างน้ำหนัก, สถานะ, สาย) is DELIBERATELY absent here — those are computed
+// live in src/lib/waste-trip.ts, never persisted, so they can never go stale.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  PLANNER
+  HEAD_OF_OPERATION
+  DATA_ENTRY
+  VIEWER
+}
+
+// §1 — the 5 processing lines. Fixed by spec scope (labels/colors live in
+// src/lib/constants.ts), unlike WasteTypeMapping below which is genuinely
+// meant to grow without a code change.
+enum Section {
+  TF
+  SP
+  AR
+  FC
+  SRF
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(VIEWER)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  wasteTripsRecorded    WasteTrip[]         @relation("WasteTripRecordedBy")
+  actualEntriesRecorded ExportActualEntry[] @relation("ActualEntryRecordedBy")
+  auditLogs             AuditLog[]
+  preparedMonths        ExportPlanMonth[]   @relation("PreparedBy")
+  receivedMonths        ExportPlanMonth[]   @relation("ReceivedBy")
+  trackedMonths         ExportPlanMonth[]   @relation("TrackedBy")
+}
+
+// §1 — Settings-editable config, NEVER hard-coded in application code.
+// SRF is seeded with confirmed:false because no source data has ever shown
+// a real Type Waste code for it — see prisma/seed.ts. Never guess this value.
+model WasteTypeMapping {
+  id             String   @id @default(cuid())
+  typeWasteValue String   @unique
+  section        Section
+  confirmed      Boolean  @default(false)
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([section])
+}
+
+// §2 — one row per trip/lot. Columns match Book1.csv 1:1 (see
+// src/lib/csv-import/waste-trip-mapping.ts for the Thai-header <-> field map)
+// so a real export can be imported directly once available.
+model WasteTrip {
+  id                  String    @id @default(cuid())
+  receivedDate        DateTime  @db.Date
+  transportDocumentNo String
+  customerCode        String
+  customerName        String
+  // Stored as text, not a numeric type: the sibling "Waste Management
+  // Production Dashboard" project's already-validated real schema stores
+  // sale_order as text (real ERP order numbers can carry leading zeros/
+  // prefixes) — trusted over the spec doc's abstract "Number" type label.
+  saleOrder           String
+  wasteCode           String
+  wasteName           String
+  saleName            String
+  saleSupport         String?
+  receivedWeightTon   Decimal   @db.Decimal(12, 3)
+  transportConfirmed  Boolean   @default(false)
+  treatedWeightTon    Decimal?  @db.Decimal(12, 3)
+  treatedDate         DateTime? @db.Date
+  typeWasteRaw        String
+  offSpec             Boolean   @default(false)
+  offSpecNote         String?
+  remark              String?
+  recordedById        String?
+  recordedBy          User?     @relation("WasteTripRecordedBy", fields: [recordedById], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([receivedDate])
+  @@index([typeWasteRaw])
+  @@index([customerCode])
+  @@index([treatedDate])
+}
+
+// §3.1 — destinations per section, config-driven for the same reason as
+// WasteTypeMapping (Settings-editable, not hard-coded).
+model Destination {
+  id           String            @id @default(cuid())
+  section      Section
+  name         String
+  standingNote String?
+  active       Boolean           @default(true)
+  blocks       ExportPlanBlock[]
+
+  @@unique([section, name])
+}
+
+// §3.4 — GL / MKC / KMW / ศิวัช / PN PRO, editable in Settings.
+model TransportCompany {
+  id            String               @id @default(cuid())
+  name          String               @unique
+  active        Boolean              @default(true)
+  actualEntries ExportActualEntry[]
+}
+
+// §3.4 — one per calendar month; carries the 3-signature sign-off.
+model ExportPlanMonth {
+  id    String @id @default(cuid())
+  year  Int
+  month Int // 1-12
+
+  preparedByUserId String?
+  preparedByUser   User?     @relation("PreparedBy", fields: [preparedByUserId], references: [id])
+  preparedByName   String?
+  preparedAt       DateTime?
+
+  receivedByUserId String?
+  receivedByUser   User?     @relation("ReceivedBy", fields: [receivedByUserId], references: [id])
+  receivedByName   String?
+  receivedAt       DateTime?
+
+  trackedByUserId String?
+  trackedByUser   User?     @relation("TrackedBy", fields: [trackedByUserId], references: [id])
+  trackedByName   String?
+  trackedAt       DateTime?
+
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  blocks    ExportPlanBlock[]
+
+  @@unique([year, month])
+}
+
+// §3.2 — one block per section+destination+month.
+model ExportPlanBlock {
+  id            String              @id @default(cuid())
+  monthId       String
+  month         ExportPlanMonth     @relation(fields: [monthId], references: [id], onDelete: Cascade)
+  section       Section
+  destinationId String
+  destination   Destination         @relation(fields: [destinationId], references: [id])
+  targetPlanTon Decimal?            @db.Decimal(12, 3)
+  plannedDays   Int[]               @default([])
+  remark        String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  actualEntries ExportActualEntry[]
+
+  @@unique([monthId, section, destinationId])
+  @@index([section])
+}
+
+// §3.2 "แถวจริง" — one row per real shipment.
+model ExportActualEntry {
+  id                 String            @id @default(cuid())
+  blockId            String
+  block              ExportPlanBlock   @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  shipmentDate       DateTime          @db.Date
+  weightTon          Decimal?          @db.Decimal(12, 3) // nullable: CSV-imported rows may carry a date with no weight yet (§7 import path)
+  transportCompanyId String?
+  transportCompany   TransportCompany? @relation(fields: [transportCompanyId], references: [id])
+  note               String?
+  recordedById       String?
+  recordedBy         User?             @relation("ActualEntryRecordedBy", fields: [recordedById], references: [id])
+  createdAt          DateTime          @default(now())
+
+  @@index([blockId, shipmentDate])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  oldValue   Json?
+  newValue   Json?
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
