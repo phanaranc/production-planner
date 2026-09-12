@@ -1,5 +1,7 @@
 # GENCO Production Waste Management Planner
 
+[![CI](https://github.com/phanaranc/production-planner/actions/workflows/ci.yml/badge.svg)](https://github.com/phanaranc/production-planner/actions/workflows/ci.yml)
+
 Web app วางแผนการผลิต แผนก Production Waste Management (สาย TF/SP/AR/FC/SRF) — ตาม
 `master_prompt_waste_management_webapp_v2.md`. เว็บแอปนี้เป็นโปรเจกต์ใหม่ แยกอิสระจาก
 `.Genco` และ `Waste Management Production Dashboard` โดยเจตนา — มีฐานข้อมูล Postgres
