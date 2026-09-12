@@ -15,7 +15,7 @@ export function UsersTab({ users, canEdit }: { users: Pick<User, "id" | "name" |
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        ผู้ใช้/สิทธิ์อนุมัติ (§6/§8) — "Planner" กรอกข้อมูล, "Head of Operation" เป็นผู้อนุมัติขั้นสุดท้าย ตามหลัก Recommend ไม่ใช่ Command
+        ผู้ใช้/สิทธิ์อนุมัติ (§6/§8) — &quot;Planner&quot; กรอกข้อมูล, &quot;Head of Operation&quot; เป็นผู้อนุมัติขั้นสุดท้าย ตามหลัก Recommend ไม่ใช่ Command
       </p>
       <table className="w-full text-sm">
         <thead>

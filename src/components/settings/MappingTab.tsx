@@ -13,7 +13,7 @@ export function MappingTab({ mappings, canEdit }: { mappings: WasteTypeMapping[]
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-500">
-        Mapping จาก "Type Waste" (ค่าที่พบจริงในข้อมูล) ไปยัง 1 ใน 5 สาย — แก้ไขได้ที่นี่โดยไม่ต้องแก้โค้ด (§1) แถวที่ยังไม่ยืนยัน
+        Mapping จาก &quot;Type Waste&quot; (ค่าที่พบจริงในข้อมูล) ไปยัง 1 ใน 5 สาย — แก้ไขได้ที่นี่โดยไม่ต้องแก้โค้ด (§1) แถวที่ยังไม่ยืนยัน
         (unconfirmed) จะแสดงคำเตือนในหน้าสายที่เกี่ยวข้อง
       </p>
       <table className="w-full text-sm">
