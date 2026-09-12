@@ -27,7 +27,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: { t
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-navy-900">Settings</h1>
-        <p className="text-sm text-gray-500">ค่า Config ทั้งหมดในหน้านี้แก้ไขได้โดยไม่ต้องแก้โค้ด ตามหลัก "ห้าม hard-code"</p>
+        <p className="text-sm text-gray-500">ค่า Config ทั้งหมดในหน้านี้แก้ไขได้โดยไม่ต้องแก้โค้ด ตามหลัก &quot;ห้าม hard-code&quot;</p>
       </div>
 
       <div className="flex gap-2 border-b">

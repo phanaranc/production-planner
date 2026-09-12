@@ -101,7 +101,7 @@ export default async function DashboardPage() {
       <div className="card">
         <h2 className="font-semibold text-navy-900 mb-2">หมายเหตุ</h2>
         <p className="text-sm text-gray-500">
-          ตัวเลขทั้งหมดคำนวณสดจากฐานข้อมูล ไม่มีค่า Hard-code — ระบบเป็นเครื่องมือ "แนะนำ" เท่านั้น การอนุมัติแผนขั้นสุดท้ายเป็นของ Planner / Head of
+          ตัวเลขทั้งหมดคำนวณสดจากฐานข้อมูล ไม่มีค่า Hard-code — ระบบเป็นเครื่องมือ &quot;แนะนำ&quot; เท่านั้น การอนุมัติแผนขั้นสุดท้ายเป็นของ Planner / Head of
           Operation เสมอ
         </p>
       </div>
