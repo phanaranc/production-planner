@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ppwm
+          POSTGRES_PASSWORD: ppwm_ci
+          POSTGRES_DB: production_planner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ppwm -d production_planner"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://ppwm:ppwm_ci@localhost:5432/production_planner?schema=public
+      SESSION_SECRET: ci-only-secret-not-for-real-use
+      TZ: Asia/Bangkok
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npm run prisma:generate
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Apply migrations
+        run: npm run prisma:migrate:deploy
+
+      - name: Build
+        run: npm run build
