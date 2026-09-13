@@ -549,10 +549,18 @@ default) ระบุให้ชัดเจนเสมอว่า event เ�
 4. **เสร็จแล้ว** — ผู้ใช้ยืนยันตรง (2026-09-13) ว่า master list ของ `ประเภทรถ` มีครบ 5
    ประเภทตามที่พบในเอกสารตัวอย่าง §3.2 เท่านั้น ไม่มีเพิ่มเติม: `LUGGER TRAILER`,
    `PICK UP`, `ROLL OFF TRAILER`, `SMALL TRUCK DUMP`, `ROLL OFF TRUCK`
-5. ยืนยันว่าต้องเชื่อม/แยกขาดจาก Google Calendar และ Telegram bot account ใด (ยังไม่มี
-   credential ใดๆ ในเอกสารนี้ ตามหลักการห้ามใส่ secret) — **ผู้ใช้ต้องสร้างบัญชี/credential
-   เองตามขั้นตอนใน [ภาคผนวก ก](#ภาคผนวก-ก-วิธีขอ-credential-telegram-bot-และ-google-calendar-oauth)
-   ด้านล่าง** เพราะเป็นการสร้าง/ตั้งค่าบัญชีที่ต้องล็อกอินด้วยบัญชีของผู้ใช้เอง
+5. **เสร็จแล้ว** (2026-09-13) — ผู้ใช้สร้างบัญชี/credential จริงเองตามขั้นตอนใน
+   [ภาคผนวก ก](#ภาคผนวก-ก-วิธีขอ-credential-telegram-bot-และ-google-calendar-oauth) แล้ว:
+   - **Google Calendar OAuth**: สร้าง GCP project `genco-ops-command-center`, เปิดใช้
+     Calendar API, ตั้งค่า OAuth consent screen (External, app name "Waste Operation
+     Plan"), สร้าง OAuth Client ID ("Waste Operation Plan - Web") พร้อม redirect URI
+     ชั่วคราว `http://localhost:3000/api/auth/google/callback` (ต้องเปลี่ยนเป็นโดเมนจริง
+     เมื่อ deploy แอปจริง), และเพิ่ม test user แล้ว 1 บัญชี — Client ID/Secret เก็บไว้ใน
+     `.env` ของผู้ใช้เท่านั้น ไม่เคยผ่านเอกสารหรือ AI prompt นี้
+   - **Telegram Bot**: สร้างผ่าน @BotFather สำเร็จแล้ว — ชื่อ "GENCO Ops Bot"
+     (username `genco_ops_bot`, `t.me/genco_ops_bot`) — token เก็บไว้ใน `.env` ของผู้ใช้
+     เท่านั้นเช่นกัน — **ยังต้องมีคนกด `/start` คุยกับบอทเองก่อนบอทจะส่งข้อความหาได้**
+     (ข้อกำหนดของ Telegram เอง)
 
 ## ภาคผนวก ก: วิธีขอ credential Telegram Bot และ Google Calendar OAuth
 
