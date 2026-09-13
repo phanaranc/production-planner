@@ -94,6 +94,42 @@ export async function getBlocksForMonth(monthId: string): Promise<BlockClient[]>
   });
 }
 
+export type UnlinkedActualEntryClient = {
+  id: string;
+  shipmentDate: string; // yyyy-mm-dd
+  treatmentDate: string | null;
+  manifestNo: string | null;
+  customerName: string | null;
+  wasteCategory: string | null;
+  section: Section | null;
+  weightTon: number | null;
+  note: string | null;
+};
+
+/** Actual-shipment rows imported from the flat file (Settings → นำเข้าข้อมูล
+ * → นำเข้าแผนส่งออก) land with blockId=null — they carry no destination.
+ * This lists them for the month shown so they're never a silent dead end;
+ * a Planner/admin assigns each one to a specific plan block from here. */
+export async function getUnlinkedActualEntries(year: number, month: number): Promise<UnlinkedActualEntryClient[]> {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  const entries = await prisma.exportActualEntry.findMany({
+    where: { blockId: null, shipmentDate: { gte: start, lt: end } },
+    orderBy: { shipmentDate: "asc" }
+  });
+  return entries.map((e) => ({
+    id: e.id,
+    shipmentDate: e.shipmentDate.toISOString().slice(0, 10),
+    treatmentDate: e.treatmentDate ? e.treatmentDate.toISOString().slice(0, 10) : null,
+    manifestNo: e.manifestNo,
+    customerName: e.customerName,
+    wasteCategory: e.wasteCategory,
+    section: e.section,
+    weightTon: e.weightTon != null ? Number(e.weightTon) : null,
+    note: e.note
+  }));
+}
+
 export type MonthSummary = {
   targetPlanTotalTon: number;
   actualTotalTon: number;

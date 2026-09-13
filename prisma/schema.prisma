@@ -117,9 +117,9 @@ model Destination {
 
 // §3.4 — GL / MKC / KMW / ศิวัช / PN PRO, editable in Settings.
 model TransportCompany {
-  id            String               @id @default(cuid())
-  name          String               @unique
-  active        Boolean              @default(true)
+  id            String              @id @default(cuid())
+  name          String              @unique
+  active        Boolean             @default(true)
   actualEntries ExportActualEntry[]
 }
 
@@ -171,20 +171,41 @@ model ExportPlanBlock {
 }
 
 // §3.2 "แถวจริง" — one row per real shipment.
+//
+// blockId is OPTIONAL: the real actual-shipment export ("Raw Data
+// รายงานข้อมูลการส่งของเสีย...xlsx", flat one-row-per-Manifest-No. shape,
+// columns วันที่ส่งกาก/วันที่บำบัด/Manifest No./ชื่อลูกค้า/ประเภทกาก/
+// แผนกบำบัด/นน.ส่งออก(ตัน)/หมายเหตุ) carries no destination at all — only
+// a treatment department code that matches the existing Section enum
+// (SP/AR/FC/TF/SRF). Rows imported from that file are stored unlinked
+// (blockId null, section set directly from แผนกบำบัด) until someone
+// manually reconciles them against a specific month+destination plan
+// block; entries created through the existing calendar UI (DayEditPopover)
+// keep populating blockId (and section is then read off block.section,
+// not duplicated) exactly as before. onDelete is SetNull rather than
+// Cascade because deleting a plan block must never silently destroy
+// imported actual-shipment data that happens to be linked to it.
 model ExportActualEntry {
   id                 String            @id @default(cuid())
-  blockId            String
-  block              ExportPlanBlock   @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  shipmentDate       DateTime          @db.Date
-  weightTon          Decimal?          @db.Decimal(12, 3) // nullable: CSV-imported rows may carry a date with no weight yet (§7 import path)
+  blockId            String?
+  block              ExportPlanBlock?  @relation(fields: [blockId], references: [id], onDelete: SetNull)
+  section            Section? // แผนกบำบัด — set directly on unlinked (blockId null) rows; redundant with block.section once linked
+  shipmentDate       DateTime          @db.Date // วันที่ส่งกาก
+  treatmentDate      DateTime?         @db.Date // วันที่บำบัด — only present in the flat actual-shipment source
+  manifestNo         String? // Manifest No. — only present in the flat actual-shipment source
+  customerName       String? // ชื่อลูกค้า — only present in the flat actual-shipment source
+  wasteCategory      String? // ประเภทกาก — only present in the flat actual-shipment source
+  weightTon          Decimal?          @db.Decimal(12, 3) // นน.ส่งออก(ตัน) — nullable: CSV-imported rows may carry a date with no weight yet (§7 import path)
   transportCompanyId String?
   transportCompany   TransportCompany? @relation(fields: [transportCompanyId], references: [id])
-  note               String?
+  note               String? // หมายเหตุ
   recordedById       String?
   recordedBy         User?             @relation("ActualEntryRecordedBy", fields: [recordedById], references: [id])
   createdAt          DateTime          @default(now())
 
   @@index([blockId, shipmentDate])
+  @@index([manifestNo])
+  @@index([section, shipmentDate])
 }
 
 model AuditLog {

@@ -111,6 +111,37 @@ export async function saveSignOffAction(input: {
   revalidatePath("/export-plan");
 }
 
+/** Assigns an imported, unlinked (blockId=null) actual-shipment entry to a
+ * specific plan block — the manual reconciliation step for rows imported
+ * from the flat file, which carries no destination (see
+ * getUnlinkedActualEntries in src/lib/export-plan-data.ts). */
+export async function assignActualEntryToBlockAction(entryId: string, blockId: string) {
+  const session = await requireUser();
+  assertCan(session.role, "editExportPlan");
+
+  const [entry, block] = await Promise.all([
+    prisma.exportActualEntry.findUniqueOrThrow({ where: { id: entryId } }),
+    prisma.exportPlanBlock.findUniqueOrThrow({ where: { id: blockId } })
+  ]);
+  if (entry.section && entry.section !== block.section) {
+    const err = new Error(`แผนกบำบัดของรายการ (${entry.section}) ไม่ตรงกับสายของบล็อกที่เลือก (${block.section})`);
+    (err as any).status = 400;
+    throw err;
+  }
+
+  const updated = await prisma.exportActualEntry.update({ where: { id: entryId }, data: { blockId } });
+  await addAuditLog({
+    entityType: "ExportActualEntry",
+    entityId: entryId,
+    userId: session.userId,
+    action: "assign-to-block",
+    oldValue: { blockId: entry.blockId },
+    newValue: { blockId: updated.blockId }
+  });
+  revalidatePath("/export-plan");
+  revalidatePath("/dashboard");
+}
+
 export async function createBlockAction(input: { monthId: string; section: string; destinationId: string }) {
   const session = await requireUser();
   assertCan(session.role, "editExportPlan");

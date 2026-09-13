@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/current-user";
 import { can } from "@/lib/rbac";
-import { getOrCreateMonth, getBlocksForMonth, getMonthSummary } from "@/lib/export-plan-data";
+import { getOrCreateMonth, getBlocksForMonth, getMonthSummary, getUnlinkedActualEntries } from "@/lib/export-plan-data";
 import { MONTH_LABELS_TH } from "@/lib/constants";
 import { ExportPlanCalendar } from "@/components/export-plan/ExportPlanCalendar";
 import { MonthSummaryPanel } from "@/components/export-plan/MonthSummaryPanel";
 import { SignOffForm } from "@/components/export-plan/SignOffForm";
+import { UnlinkedActualEntriesPanel } from "@/components/export-plan/UnlinkedActualEntriesPanel";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,7 @@ export default async function ExportPlanPage({ searchParams }: { searchParams: {
     prisma.transportCompany.findMany({ where: { active: true } })
   ]);
   const summary = await getMonthSummary(year, month, blocks);
+  const unlinkedActualEntries = await getUnlinkedActualEntries(year, month);
 
   const prevMonth = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
   const nextMonth = month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
@@ -75,6 +77,8 @@ export default async function ExportPlanPage({ searchParams }: { searchParams: {
       />
 
       <MonthSummaryPanel summary={summary} />
+
+      <UnlinkedActualEntriesPanel entries={unlinkedActualEntries} blocks={blocks} canEdit={can(session.role, "editExportPlan")} />
 
       <SignOffForm monthId={monthRecord.id} monthRecord={monthRecord} canSignOff={can(session.role, "signOff")} />
     </div>
