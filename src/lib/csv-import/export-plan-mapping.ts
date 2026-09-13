@@ -33,6 +33,15 @@
 // header showed "...,27,28,1,2,3" — days 1-3 left over from a 31-day
 // template, not real Feb 29-31). Never trust the header labels past the
 // real day count — always compute it from the sheet's own (year, month).
+//
+// Data-quality artifact confirmed from the real file (traced 2026-09-13,
+// not a parser bug): several month sheets carry one extra, incomplete
+// "Waste Water." block tacked on at the very bottom (e.g. rows 66-69 in
+// "Aug 26") — a stray Target plan value (200) with no destination name
+// and no แผน/จริง day data at all. This parser correctly surfaces it via
+// the "ไม่มีชื่อปลายทาง" warning and excludes it from import (a block
+// with no destinationName never gets willImport:true downstream) rather
+// than guessing a name for it — this is expected, not something to fix.
 
 export type ParsedActualDay = { day: number; weightTon: number };
 
