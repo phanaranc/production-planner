@@ -6,8 +6,11 @@ import {
   commitWasteTripImportAction,
   previewExportActualImportAction,
   commitExportActualImportAction,
+  previewPlanDeliveryImportAction,
+  commitPlanDeliveryImportAction,
   type ImportPreview,
-  type ExportActualImportPreview
+  type ExportActualImportPreview,
+  type PlanDeliveryImportPreview
 } from "@/app/(app)/settings/actions";
 
 export function ImportTab() {
@@ -16,6 +19,8 @@ export function ImportTab() {
       <WasteTripImport />
       <hr />
       <ExportActualImport />
+      <hr />
+      <PlanDeliveryImport />
     </div>
   );
 }
@@ -185,6 +190,117 @@ function ExportActualImport() {
           )}
           <button className="btn-approve" disabled={busy || preview.validCount + preview.warningCount === 0} onClick={confirmImport}>
             ยืนยันนำเข้า ({preview.validCount + preview.warningCount} แถว)
+          </button>
+        </div>
+      )}
+
+      {result && <p className="text-sm text-status-normal">{result}</p>}
+    </div>
+  );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // "data:application/...;base64,AAAA..." -> keep only the part after the comma
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function PlanDeliveryImport() {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileBase64, setFileBase64] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PlanDeliveryImportPreview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const b64 = await fileToBase64(file);
+      setFileBase64(b64);
+      const p = await previewPlanDeliveryImportAction(b64);
+      setPreview(p);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmImport() {
+    if (!fileBase64) return;
+    setBusy(true);
+    try {
+      const r = await commitPlanDeliveryImportAction(fileBase64);
+      setResult(
+        `นำเข้าสำเร็จ ${r.blocksImported} บล็อก, บันทึกรายการส่งจริงใหม่ ${r.actualEntriesCreated} รายการ (ข้าม ${r.blocksSkipped} บล็อกที่ไม่มีปลายทาง/ไม่รู้จักประเภทกาก)`
+      );
+      setPreview(null);
+      setFileBase64(null);
+      if (fileRef.current) fileRef.current.value = "";
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <h3 className="font-semibold text-navy-900">นำเข้าแผนส่งออก (Plan delivery .xlsx)</h3>
+      <p className="text-sm text-gray-500">
+        นำเข้าไฟล์ Excel รูปแบบ &quot;Plan delivery Haz 2026.xlsx&quot; (§3.3) — 1 ชีตต่อ 1 เดือน แต่ละชีตมีบล็อกตามประเภทกาก/ปลายทาง
+        พร้อมแถวแผน (จำนวนเที่ยวรถต่อวัน) และแถวจริง (น้ำหนักจริงต่อวัน) ระบบจะสร้าง/อัปเดต Target plan และวันที่มีแผนของแต่ละบล็อก
+        และเพิ่มรายการส่งจริงเฉพาะวันที่ยังไม่เคยมีรายการ (import ซ้ำจะไม่สร้างข้อมูลซ้ำ) บล็อกที่ไม่มีชื่อปลายทาง หรือประเภทกากที่ไม่รู้จัก
+        (ไม่ใช่ TF/SP/AR/FC) จะถูกข้าม — ยังไม่รองรับ SRF ในไฟล์นี้
+      </p>
+      <input ref={fileRef} type="file" accept=".xlsx" onChange={handleFile} disabled={busy} />
+
+      {preview && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <span className="text-status-normal">✅ จะนำเข้า {preview.importableCount} บล็อก</span>
+            <span className="text-status-urgent">⛔ ข้าม {preview.skippedCount} บล็อก</span>
+            {preview.skippedSheets.length > 0 && (
+              <span className="text-gray-400">ข้ามชีตที่ไม่ใช่แผนรายเดือน: {preview.skippedSheets.join(", ")}</span>
+            )}
+          </div>
+          <div className="max-h-72 overflow-y-auto border rounded-md">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b bg-gray-50 text-left">
+                  <th className="p-2">ชีต</th>
+                  <th className="p-2">สาย</th>
+                  <th className="p-2">ปลายทาง</th>
+                  <th className="p-2">Target</th>
+                  <th className="p-2">วันมีแผน</th>
+                  <th className="p-2">วันมีจริง (รวมตัน)</th>
+                  <th className="p-2">คำเตือน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.blocks.map((b, i) => (
+                  <tr key={i} className={b.willImport ? "border-b" : "border-b bg-gray-50 text-gray-400"}>
+                    <td className="p-2 whitespace-nowrap">{b.sheetName}</td>
+                    <td className="p-2">{b.section ?? <span className="text-status-urgent">{b.wasteCategoryRaw}</span>}</td>
+                    <td className="p-2">{b.destinationName || <span className="text-status-urgent">—</span>}</td>
+                    <td className="p-2">{b.targetPlanTon ?? "—"}</td>
+                    <td className="p-2">{b.plannedDaysCount}</td>
+                    <td className="p-2">
+                      {b.actualDaysCount} ({b.actualTotalTon.toLocaleString("th-TH", { maximumFractionDigits: 1 })})
+                    </td>
+                    <td className="p-2 text-amber-600">{b.warnings.join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <button className="btn-approve" disabled={busy || preview.importableCount === 0} onClick={confirmImport}>
+            ยืนยันนำเข้า ({preview.importableCount} บล็อก)
           </button>
         </div>
       )}

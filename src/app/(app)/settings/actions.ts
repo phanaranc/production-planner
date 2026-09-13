@@ -11,6 +11,8 @@ import Papa from "papaparse";
 import { rawRowToWasteTripInput, WASTE_TRIP_REQUIRED_HEADERS } from "@/lib/csv-import/waste-trip-mapping";
 import { wasteTripInputSchema, exportActualImportInputSchema } from "@/lib/csv-import/schemas";
 import { rawRowToExportActualInput, isBlankExportActualRow, EXPORT_ACTUAL_REQUIRED_HEADERS } from "@/lib/csv-import/export-actual-mapping";
+import ExcelJS from "exceljs";
+import { parsePlanDeliveryWorkbook, type CellWorksheet } from "@/lib/csv-import/export-plan-mapping";
 
 // ---- Waste Type Mapping (§1) ----
 export async function upsertMappingAction(input: { id?: string; typeWasteValue: string; section: Section; confirmed: boolean; note?: string }) {
@@ -243,4 +245,154 @@ export async function commitExportActualImportAction(csvText: string) {
   revalidatePath("/export-plan");
   revalidatePath("/dashboard");
   return { created, skipped };
+}
+
+// ---- Plan delivery (target-plan grid) .xlsx import ----
+// Real source: "Plan delivery Haz 2026.xlsx" — see
+// docs/master-prompt-operations-command-center.md §3.3 and
+// src/lib/csv-import/export-plan-mapping.ts for the confirmed structure.
+// This is a binary .xlsx, not a flat CSV, so the client sends it as a
+// base64 string rather than plain text (see ImportTab.tsx).
+export type PlanDeliveryBlockPreview = {
+  sheetName: string;
+  year: number;
+  month: number;
+  wasteCategoryRaw: string;
+  section: string | null;
+  destinationName: string;
+  targetPlanTon: number | null;
+  plannedDaysCount: number;
+  actualDaysCount: number;
+  actualTotalTon: number;
+  standingNote: string | null;
+  warnings: string[];
+  willImport: boolean;
+};
+export type PlanDeliveryImportPreview = {
+  skippedSheets: string[];
+  blocks: PlanDeliveryBlockPreview[];
+  importableCount: number;
+  skippedCount: number;
+};
+
+async function loadPlanDeliveryWorkbookSheets(fileBase64: string): Promise<CellWorksheet[]> {
+  const wb = new ExcelJS.Workbook();
+  // exceljs's bundled type defs reference a Buffer shape that doesn't
+  // line up with this project's @types/node Buffer<T> generic — the
+  // runtime value is a plain, valid Node Buffer either way, only the
+  // type-level shape mismatches between the two packages' own type defs.
+  await wb.xlsx.load(Buffer.from(fileBase64, "base64") as any);
+  return wb.worksheets.map((ws) => ({
+    name: ws.name,
+    rowCount: ws.rowCount,
+    getRow: (r: number) => ({ values: ws.getRow(r).values as unknown[] })
+  }));
+}
+
+export async function previewPlanDeliveryImportAction(fileBase64: string): Promise<PlanDeliveryImportPreview> {
+  await requireUser().then((s) => assertCan(s.role, "administer"));
+
+  const sheets = await loadPlanDeliveryWorkbookSheets(fileBase64);
+  const { blocks, skippedSheets } = parsePlanDeliveryWorkbook(sheets);
+
+  const previewBlocks: PlanDeliveryBlockPreview[] = blocks.map((b) => ({
+    sheetName: b.sheetName,
+    year: b.year,
+    month: b.month,
+    wasteCategoryRaw: b.wasteCategoryRaw,
+    section: b.section,
+    destinationName: b.destinationName,
+    targetPlanTon: b.targetPlanTon,
+    plannedDaysCount: b.plannedDays.length,
+    actualDaysCount: b.actualDays.length,
+    actualTotalTon: b.actualDays.reduce((sum, a) => sum + a.weightTon, 0),
+    standingNote: b.standingNote,
+    warnings: b.warnings,
+    willImport: b.section !== null && b.destinationName !== ""
+  }));
+
+  return {
+    skippedSheets,
+    blocks: previewBlocks,
+    importableCount: previewBlocks.filter((b) => b.willImport).length,
+    skippedCount: previewBlocks.filter((b) => !b.willImport).length
+  };
+}
+
+export async function commitPlanDeliveryImportAction(fileBase64: string) {
+  const session = await requireUser();
+  assertCan(session.role, "administer");
+
+  const sheets = await loadPlanDeliveryWorkbookSheets(fileBase64);
+  const { blocks } = parsePlanDeliveryWorkbook(sheets);
+
+  let blocksImported = 0;
+  let blocksSkipped = 0;
+  let actualEntriesCreated = 0;
+
+  for (const b of blocks) {
+    if (!b.section || !b.destinationName) {
+      blocksSkipped++;
+      continue;
+    }
+    const section = b.section as Section;
+
+    const destination = await prisma.destination.upsert({
+      where: { section_name: { section, name: b.destinationName } },
+      update: b.standingNote ? { standingNote: b.standingNote } : {},
+      create: { section, name: b.destinationName, standingNote: b.standingNote ?? undefined }
+    });
+
+    const monthRecord = await prisma.exportPlanMonth.upsert({
+      where: { year_month: { year: b.year, month: b.month } },
+      update: {},
+      create: { year: b.year, month: b.month }
+    });
+
+    const block = await prisma.exportPlanBlock.upsert({
+      where: { monthId_section_destinationId: { monthId: monthRecord.id, section, destinationId: destination.id } },
+      update: {
+        plannedDays: b.plannedDays,
+        ...(b.targetPlanTon != null ? { targetPlanTon: b.targetPlanTon } : {})
+      },
+      create: {
+        monthId: monthRecord.id,
+        section,
+        destinationId: destination.id,
+        plannedDays: b.plannedDays,
+        targetPlanTon: b.targetPlanTon ?? undefined
+      }
+    });
+    blocksImported++;
+
+    for (const a of b.actualDays) {
+      const shipmentDate = new Date(Date.UTC(b.year, b.month - 1, a.day));
+      const existing = await prisma.exportActualEntry.findFirst({
+        where: { blockId: block.id, shipmentDate }
+      });
+      if (existing) continue; // idempotent re-import: never duplicate a day that already has an actual entry
+      await prisma.exportActualEntry.create({
+        data: {
+          blockId: block.id,
+          section,
+          shipmentDate,
+          weightTon: a.weightTon,
+          recordedById: session.userId
+        }
+      });
+      actualEntriesCreated++;
+    }
+  }
+
+  await addAuditLog({
+    entityType: "ExportPlanBlock",
+    entityId: "bulk-import-plan-delivery",
+    userId: session.userId,
+    action: "xlsx-import",
+    newValue: { blocksImported, blocksSkipped, actualEntriesCreated }
+  });
+  revalidatePath("/export-plan");
+  revalidatePath("/dashboard");
+  revalidatePath("/settings");
+  return { blocksImported, blocksSkipped, actualEntriesCreated };
 }
