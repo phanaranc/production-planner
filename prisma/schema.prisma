@@ -190,7 +190,14 @@ model ExportActualEntry {
   blockId            String?
   block              ExportPlanBlock?  @relation(fields: [blockId], references: [id], onDelete: SetNull)
   section            Section? // แผนกบำบัด — set directly on unlinked (blockId null) rows; redundant with block.section once linked
-  shipmentDate       DateTime          @db.Date // วันที่ส่งกาก
+  // Nullable per explicit user decision (2026-09-13): the flat
+  // actual-shipment source has plenty of real rows (weight + no other
+  // column at all) with genuinely no date anywhere to read. Such a row
+  // still counts toward monthly actual totals once assigned to a block,
+  // but never matches a specific calendar day (see dayCellState /
+  // DayEditPopover, which key off an exact date match) — surfaced
+  // separately in the UI as "ไม่ทราบวันที่" rather than fabricated.
+  shipmentDate       DateTime?         @db.Date // วันที่ส่งกาก
   treatmentDate      DateTime?         @db.Date // วันที่บำบัด — only present in the flat actual-shipment source
   manifestNo         String? // Manifest No. — only present in the flat actual-shipment source
   customerName       String? // ชื่อลูกค้า — only present in the flat actual-shipment source

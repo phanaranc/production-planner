@@ -221,7 +221,7 @@ export async function commitExportActualImportAction(csvText: string) {
       data: {
         blockId: null,
         section,
-        shipmentDate: new Date(d.shipmentDate),
+        shipmentDate: d.shipmentDate ? new Date(d.shipmentDate) : null,
         treatmentDate: d.treatmentDate ? new Date(d.treatmentDate) : null,
         manifestNo: d.manifestNo || null,
         customerName: d.customerName || null,

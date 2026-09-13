@@ -88,6 +88,11 @@ export function ExportPlanCalendar({
                       รวมจริง: {block.totalActualTon.toLocaleString("th-TH", { maximumFractionDigits: 1 })} ตัน
                       {block.achievementPct != null && ` (${block.achievementPct.toFixed(1)}%)`}
                     </span>
+                    {block.undatedActualCount > 0 && (
+                      <span className="text-amber-600 text-xs" title="รายการเหล่านี้นับรวมในยอดข้างต้นแล้ว แต่ไม่ปรากฏในช่องปฏิทินเพราะไม่ทราบวันที่">
+                        (รวม {block.undatedActualCount} รายการไม่ทราบวันที่)
+                      </span>
+                    )}
                   </div>
                 </div>
 

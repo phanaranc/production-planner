@@ -4,7 +4,7 @@ import type { DayCellState } from "@/lib/constants";
 
 export type ActualEntryClient = {
   id: string;
-  shipmentDate: string; // yyyy-mm-dd
+  shipmentDate: string | null; // yyyy-mm-dd, or null — "ไม่ทราบวันที่" (see prisma/schema.prisma ExportActualEntry.shipmentDate comment)
   weightTon: number | null;
   transportCompanyId: string | null;
   transportCompanyName: string | null;
@@ -23,6 +23,11 @@ export type BlockClient = {
   actualEntries: ActualEntryClient[];
   totalActualTon: number;
   achievementPct: number | null;
+  // Counts toward totalActualTon but never appears under any day cell —
+  // dayCellState/calendar cells key off an exact date match, and these
+  // have no date (see ExportActualEntry.shipmentDate). Surfaced so the
+  // total shown doesn't silently outrun what the calendar visibly shows.
+  undatedActualCount: number;
 };
 
 export function daysInMonth(year: number, month: number): number {
@@ -68,7 +73,7 @@ export async function getBlocksForMonth(monthId: string): Promise<BlockClient[]>
   return blocks.map((b) => {
     const actualEntries: ActualEntryClient[] = b.actualEntries.map((e) => ({
       id: e.id,
-      shipmentDate: e.shipmentDate.toISOString().slice(0, 10),
+      shipmentDate: e.shipmentDate ? e.shipmentDate.toISOString().slice(0, 10) : null,
       weightTon: e.weightTon != null ? Number(e.weightTon) : null,
       transportCompanyId: e.transportCompanyId,
       transportCompanyName: e.transportCompany?.name ?? null,
@@ -77,6 +82,7 @@ export async function getBlocksForMonth(monthId: string): Promise<BlockClient[]>
     const totalActualTon = actualEntries.reduce((sum, e) => sum + (e.weightTon ?? 0), 0);
     const targetPlanTon = b.targetPlanTon != null ? Number(b.targetPlanTon) : null;
     const achievementPct = targetPlanTon && targetPlanTon > 0 ? (totalActualTon / targetPlanTon) * 100 : null;
+    const undatedActualCount = actualEntries.filter((e) => e.shipmentDate === null).length;
 
     return {
       id: b.id,
@@ -89,14 +95,15 @@ export async function getBlocksForMonth(monthId: string): Promise<BlockClient[]>
       remark: b.remark,
       actualEntries,
       totalActualTon,
-      achievementPct
+      achievementPct,
+      undatedActualCount
     };
   });
 }
 
 export type UnlinkedActualEntryClient = {
   id: string;
-  shipmentDate: string; // yyyy-mm-dd
+  shipmentDate: string | null; // yyyy-mm-dd, or null — "ไม่ทราบวันที่"
   treatmentDate: string | null;
   manifestNo: string | null;
   customerName: string | null;
@@ -108,18 +115,23 @@ export type UnlinkedActualEntryClient = {
 
 /** Actual-shipment rows imported from the flat file (Settings → นำเข้าข้อมูล
  * → นำเข้าแผนส่งออก) land with blockId=null — they carry no destination.
- * This lists them for the month shown so they're never a silent dead end;
- * a Planner/admin assigns each one to a specific plan block from here. */
+ * This lists them so they're never a silent dead end; a Planner/admin
+ * assigns each one to a specific plan block from here. Rows that DO have a
+ * shipmentDate are scoped to the viewed month like everything else on this
+ * page; rows with no date at all (shipmentDate null — see the schema
+ * comment) have no month to belong to, so they're always included
+ * regardless of which month is being viewed, rather than being invisible
+ * forever. */
 export async function getUnlinkedActualEntries(year: number, month: number): Promise<UnlinkedActualEntryClient[]> {
   const start = new Date(Date.UTC(year, month - 1, 1));
   const end = new Date(Date.UTC(year, month, 1));
   const entries = await prisma.exportActualEntry.findMany({
-    where: { blockId: null, shipmentDate: { gte: start, lt: end } },
+    where: { blockId: null, OR: [{ shipmentDate: { gte: start, lt: end } }, { shipmentDate: null }] },
     orderBy: { shipmentDate: "asc" }
   });
   return entries.map((e) => ({
     id: e.id,
-    shipmentDate: e.shipmentDate.toISOString().slice(0, 10),
+    shipmentDate: e.shipmentDate ? e.shipmentDate.toISOString().slice(0, 10) : null,
     treatmentDate: e.treatmentDate ? e.treatmentDate.toISOString().slice(0, 10) : null,
     manifestNo: e.manifestNo,
     customerName: e.customerName,

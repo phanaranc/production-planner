@@ -22,9 +22,10 @@
 // shape (note is a bare number AND weightTon/shipmentDate/manifestNo are
 // all blank); a row with real remark text in หมายเหตุ is never touched.
 // Note this does NOT manufacture the row's other missing fields — a
-// shifted-weight row still has no shipmentDate/manifestNo of its own, so
-// it is still rejected (shipmentDate is required to persist a row) unless
-// the source file actually carries those values too.
+// shifted-weight row still has no shipmentDate/manifestNo of its own.
+// shipmentDate is nullable on ExportActualEntry (per explicit user
+// decision, 2026-09-13): such a row is still imported with weightTon and
+// no date, surfaced in the UI as "ไม่ทราบวันที่" rather than a guessed date.
 
 export const EXPORT_ACTUAL_HEADER_MAP: Record<string, string> = {
   "วันที่ส่งกาก": "shipmentDate",
@@ -113,7 +114,7 @@ export function rawRowToExportActualInput(row: Record<string, string>): ParsedEx
   }
   if (!out.weightTon) qualityNotes.push("ไม่มี นน.ส่งออก(ตัน)");
   if (!out.manifestNo) qualityNotes.push("ไม่มี Manifest No.");
-  if (!rawShipmentDate) qualityNotes.push("ไม่มีวันที่ส่งกาก");
+  if (!rawShipmentDate) qualityNotes.push("ไม่มีวันที่ส่งกาก — จะนำเข้าเป็น \"ไม่ทราบวันที่\"");
   if (out.section && !KNOWN_SECTIONS.includes(out.section)) {
     qualityNotes.push(`แผนกบำบัด "${out.section}" ไม่ตรงกับ Section ที่รู้จัก (TF/SP/AR/FC/SRF)`);
   }

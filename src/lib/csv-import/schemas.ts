@@ -27,14 +27,16 @@ export type WasteTripInput = z.infer<typeof wasteTripInputSchema>;
 
 // Real flat actual-shipment export (see
 // src/lib/csv-import/export-actual-mapping.ts for the header map and the
-// merged-cell data-quality note). Only shipmentDate/weightTon are required
-// to persist a row — every other column is genuinely optional in this
-// source (a row's Manifest No./customer/waste-category context can be
-// legitimately absent even once the merged-cell artifact is accounted
-// for), but their absence is still surfaced as a warning in the import
+// merged-cell data-quality note). Only weightTon is required to persist a
+// row. shipmentDate was required until 2026-09-13 — the user explicitly
+// asked to stop rejecting rows that genuinely have no date anywhere in the
+// source; ExportActualEntry.shipmentDate is now nullable to match. Every
+// other column is genuinely optional in this source (a row's Manifest
+// No./customer/waste-category context, or the date, can be legitimately
+// absent), but absence is still surfaced as a warning in the import
 // preview so the importing user can decide whether to fix the source file.
 export const exportActualImportInputSchema = z.object({
-  shipmentDate: z.string().min(1, "ไม่มีวันที่ส่งกาก (อาจเป็นผลจากเซลรวมในไฟล์ต้นฉบับ — ตรวจสอบไฟล์ก่อน import)"),
+  shipmentDate: z.string().optional(),
   treatmentDate: z.string().optional(),
   manifestNo: z.string().optional(),
   customerName: z.string().optional(),

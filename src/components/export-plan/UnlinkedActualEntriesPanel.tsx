@@ -66,7 +66,9 @@ export function UnlinkedActualEntriesPanel({
               const matchingBlocks = blocks.filter((b) => !e.section || b.section === e.section);
               return (
                 <tr key={e.id} className="border-b">
-                  <td className="p-2 whitespace-nowrap">{e.shipmentDate}</td>
+                  <td className="p-2 whitespace-nowrap">
+                    {e.shipmentDate ?? <span className="text-amber-600">ไม่ทราบวันที่</span>}
+                  </td>
                   <td className="p-2 whitespace-nowrap">{e.manifestNo ?? <span className="text-gray-400">—</span>}</td>
                   <td className="p-2">{e.customerName ?? <span className="text-gray-400">—</span>}</td>
                   <td className="p-2">{e.wasteCategory ?? <span className="text-gray-400">—</span>}</td>
