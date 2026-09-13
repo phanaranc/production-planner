@@ -9,20 +9,22 @@
 // §3.1 for the sibling Manifest dataset this lines up with):
 //   วันที่ส่งกาก,วันที่บำบัด,Manifest No.,ชื่อลูกค้า,ประเภทกาก,แผนกบำบัด,นน.ส่งออก(ตัน),หมายเหตุ
 //
-// Data-quality note confirmed from the real file (checked by actually
+// Data-quality note confirmed from the sample file (checked by actually
 // counting comma positions against the header, not assumed): of 1701 rows,
 // 1448 carry a bare decimal number in the LAST column position — which the
 // header row makes it "หมายเหตุ" (note), NOT "นน.ส่งออก(ตัน)" (the actual
-// weight column, which is genuinely empty on those rows). An earlier draft
-// of this file wrongly assumed that number was a shifted weight value and
-// treated it as such — do not repeat that mistake. As written, a plausible
-// weight number sitting in "หมายเหตุ" while "นน.ส่งออก(ตัน)" is empty is
-// flagged below as its own diagnostic and the row is correctly rejected
-// (weightTon is required to persist a row) rather than silently
-// reinterpreting หมายเหตุ as the weight. Only a human who can see the
-// original spreadsheet (merged cells, a shifted column, or something else
-// entirely) can confirm which column the real value belongs in — never
-// guess it here.
+// weight column, which is empty on those rows). Confirmed with the user
+// (2026-09-13) that this is a known artifact of that particular sample
+// file, not a real-file data problem: a bare number sitting alone in
+// "หมายเหตุ" while every other column (including นน.ส่งออก(ตัน)) is blank
+// IS the export weight for that row, just shifted one column right. That
+// recovery is applied below — but it only ever fires on this exact narrow
+// shape (note is a bare number AND weightTon/shipmentDate/manifestNo are
+// all blank); a row with real remark text in หมายเหตุ is never touched.
+// Note this does NOT manufacture the row's other missing fields — a
+// shifted-weight row still has no shipmentDate/manifestNo of its own, so
+// it is still rejected (shipmentDate is required to persist a row) unless
+// the source file actually carries those values too.
 
 export const EXPORT_ACTUAL_HEADER_MAP: Record<string, string> = {
   "วันที่ส่งกาก": "shipmentDate",
@@ -102,9 +104,12 @@ export function rawRowToExportActualInput(row: Record<string, string>): ParsedEx
   // in the source spreadsheet — but it is NOT auto-corrected into weightTon.
   const looksLikeANumber = out.note != null && /^\d+(\.\d+)?$/.test(out.note);
   if (looksLikeANumber && !out.weightTon && !rawShipmentDate && !out.manifestNo) {
-    qualityNotes.push(
-      `คอลัมน์หมายเหตุมีค่าตัวเลข "${out.note}" แต่คอลัมน์อื่นทั้งหมดว่างรวมถึง นน.ส่งออก(ตัน) — ค่านี้อาจเป็นน้ำหนักส่งออกที่ตกไปอยู่ผิดคอลัมน์ในไฟล์ต้นฉบับ ต้องเปิดไฟล์ Excel ต้นฉบับตรวจสอบก่อน ระบบจะไม่เดาและย้ายค่าให้เอง`
-    );
+    // Confirmed shifted-weight recovery (see file header comment) — move it,
+    // don't just flag it. Still non-blocking info, not an error: the row
+    // may still be rejected below for missing shipmentDate/manifestNo.
+    qualityNotes.push(`ย้ายค่า "${out.note}" จากคอลัมน์หมายเหตุมาเป็น นน.ส่งออก(ตัน) (คอลัมน์ตกในไฟล์ตัวอย่าง — ยืนยันกับผู้ใช้แล้ว)`);
+    out.weightTon = out.note;
+    out.note = undefined;
   }
   if (!out.weightTon) qualityNotes.push("ไม่มี นน.ส่งออก(ตัน)");
   if (!out.manifestNo) qualityNotes.push("ไม่มี Manifest No.");
