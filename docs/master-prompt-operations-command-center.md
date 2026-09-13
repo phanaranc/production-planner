@@ -550,4 +550,57 @@ default) ระบุให้ชัดเจนเสมอว่า event เ�
    ประเภทตามที่พบในเอกสารตัวอย่าง §3.2 เท่านั้น ไม่มีเพิ่มเติม: `LUGGER TRAILER`,
    `PICK UP`, `ROLL OFF TRAILER`, `SMALL TRUCK DUMP`, `ROLL OFF TRUCK`
 5. ยืนยันว่าต้องเชื่อม/แยกขาดจาก Google Calendar และ Telegram bot account ใด (ยังไม่มี
-   credential ใดๆ ในเอกสารนี้ ตามหลักการห้ามใส่ secret)
+   credential ใดๆ ในเอกสารนี้ ตามหลักการห้ามใส่ secret) — **ผู้ใช้ต้องสร้างบัญชี/credential
+   เองตามขั้นตอนใน [ภาคผนวก ก](#ภาคผนวก-ก-วิธีขอ-credential-telegram-bot-และ-google-calendar-oauth)
+   ด้านล่าง** เพราะเป็นการสร้าง/ตั้งค่าบัญชีที่ต้องล็อกอินด้วยบัญชีของผู้ใช้เอง
+
+## ภาคผนวก ก: วิธีขอ credential Telegram Bot และ Google Calendar OAuth
+
+ขั้นตอนนี้ผู้ใช้ต้องทำเองทั้งหมด (ต้องล็อกอินด้วยบัญชีส่วนตัว/องค์กรของผู้ใช้) — AI/ทีมพัฒนา
+ไม่ควรและไม่สามารถสร้างบัญชีหรือ OAuth client แทนผู้ใช้ได้ เมื่อได้ค่าจริงมาแล้ว **ห้ามใส่ค่า
+เหล่านี้ในโค้ด, commit message, หรือ AI prompt ใดๆ** — ใส่ในไฟล์ `.env` (ที่ถูก gitignore)
+หรือ secret manager ของ deployment platform เท่านั้น
+
+### Telegram Bot
+
+1. เปิดแอป Telegram แล้วค้นหาบัญชี `@BotFather` (บัญชีทางการของ Telegram สำหรับสร้างบอท)
+2. พิมพ์คำสั่ง `/newbot` แล้วทำตามขั้นตอน: ตั้งชื่อที่แสดง (display name) และ username
+   (ต้องลงท้ายด้วย `bot` เช่น `genco_ops_bot`)
+3. BotFather จะตอบกลับด้วย **bot token** รูปแบบ `123456789:AAExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+   — เก็บค่านี้ไว้เป็น `TELEGRAM_BOT_TOKEN` ใน `.env`
+4. ให้ผู้ใช้แต่ละคนที่ต้องการรับแจ้งเตือนเปิดแชทกับบอทที่สร้างไว้แล้วพิมพ์ `/start` หนึ่งครั้ง
+   (จำเป็น — บอทส่งข้อความหาใครไม่ได้จนกว่าผู้ใช้จะเริ่มแชทก่อน)
+5. ระบบฝั่ง server ต้องบันทึกการจับคู่ `user_id` (ในระบบนี้) ↔ `telegram_chat_id` ก่อนส่งข้อความ
+   ได้จริง — ตามที่ระบุไว้แล้วใน §7 "ต้องตรวจสอบการจับคู่ user/chat ก่อนส่งข้อความทุกครั้ง"
+
+### Google Calendar OAuth
+
+1. ไปที่ [Google Cloud Console](https://console.cloud.google.com/) ด้วยบัญชี Google ของ
+   องค์กร (แนะนำใช้บัญชีองค์กร ไม่ใช่บัญชีส่วนตัว เพื่อให้ควบคุมสิทธิ์/เพิกถอนได้ภายหลัง)
+2. สร้างโปรเจกต์ใหม่ (หรือใช้โปรเจกต์ที่มีอยู่) แล้วเปิดใช้งาน **Google Calendar API** จากเมนู
+   "APIs & Services" → "Library"
+3. ไปที่ "APIs & Services" → "OAuth consent screen" ตั้งค่าประเภทเป็น Internal (ถ้าใช้ Google
+   Workspace ขององค์กร) หรือ External (ถ้าไม่ใช่) และกรอกข้อมูลแอปตามที่ระบบขอ
+4. ไปที่ "APIs & Services" → "Credentials" → "Create Credentials" → "OAuth client ID" เลือก
+   ประเภท "Web application" ใส่ **Authorized redirect URI** ให้ตรงกับ endpoint callback ของ
+   แอปจริง (เช่น `https://<โดเมนแอป>/api/auth/google/callback`)
+5. ระบบจะให้ **Client ID** และ **Client Secret** — เก็บเป็น `GOOGLE_CALENDAR_CLIENT_ID` และ
+   `GOOGLE_CALENDAR_CLIENT_SECRET` ใน `.env`
+6. ผู้ใช้แต่ละคนที่ต้องการเชื่อม Calendar ต้องกดปุ่ม "เชื่อมต่อ Google Calendar" ในแอปเอง
+   แล้วผ่านหน้ายินยอม (consent) ของ Google ด้วยตัวเอง — ตามหลักการ "เชื่อมต่อเฉพาะเมื่อผู้ใช้
+   อนุญาตชัดเจน" ใน §6 ห้ามระบบเชื่อมต่อปฏิทินของผู้ใช้ให้เองโดยไม่ผ่านหน้ายินยอมนี้
+
+### รูปแบบตัวแปรสภาพแวดล้อมที่แนะนำ (เมื่อเริ่มพัฒนาจริง)
+
+```
+# Telegram (สร้างผ่าน @BotFather — ดูขั้นตอนด้านบน)
+TELEGRAM_BOT_TOKEN="123456789:AA...(ค่าจริงจาก BotFather)"
+
+# Google Calendar OAuth (สร้างผ่าน Google Cloud Console — ดูขั้นตอนด้านบน)
+GOOGLE_CALENDAR_CLIENT_ID="....apps.googleusercontent.com"
+GOOGLE_CALENDAR_CLIENT_SECRET="...(ค่าจริงจาก Google Cloud Console)"
+GOOGLE_CALENDAR_REDIRECT_URI="https://<โดเมนแอปจริง>/api/auth/google/callback"
+```
+
+ห้าม commit ไฟล์ที่มีค่าจริงเหล่านี้ — ใส่ชื่อตัวแปร (ไม่ใส่ค่า) ไว้ใน `.env.example` เท่านั้น
+ตามรูปแบบเดียวกับที่ทำไว้แล้วใน repo `production-planner`
